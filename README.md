@@ -4,6 +4,12 @@ Detect whether a small language
 model's answer is *hallucinated* (fabricated) or *truthful* using the model's
 own internal representations (hidden states).
 
+## Solution Report
+
+See the full reproducibility and methodology report here:
+
+[SOLUTION.md](./SOLUTION.md)
+
 ## Overview
 
 Large (and small) language models sometimes *hallucinate* — they generate
