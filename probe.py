@@ -13,8 +13,14 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+
+
+RANDOM_STATE = 42
+PCA_COMPONENTS = 96
 
 
 class HallucinationProbe(nn.Module):
@@ -30,6 +36,8 @@ class HallucinationProbe(nn.Module):
         self._net: nn.Sequential | None = None  # built lazily in fit()
         self._scaler = StandardScaler()
         self._threshold: float = 0.5  # tuned by fit_hyperparameters()
+        self._pca: PCA | None = None
+        self._classifier: LogisticRegression | None = None
 
     # ------------------------------------------------------------------
     # STUDENT: Replace or extend the network definition below.
@@ -42,6 +50,7 @@ class HallucinationProbe(nn.Module):
         Args:
             input_dim: Feature vector dimensionality.
         """
+        torch.manual_seed(RANDOM_STATE)
         self._net = nn.Sequential(
             nn.Linear(input_dim, 256),
             nn.ReLU(),
@@ -68,8 +77,9 @@ class HallucinationProbe(nn.Module):
     def fit(self, X: np.ndarray, y: np.ndarray) -> "HallucinationProbe":
         """Train the probe on labelled feature vectors.
 
-        Scales features with ``StandardScaler``, builds the network if needed,
-        and optimises with Adam + ``BCEWithLogitsLoss``.
+        Scales features, compresses them with PCA, and fits a balanced
+        logistic regression probe. This keeps the classifier stable for the
+        small dataset and high-dimensional hidden-state representation.
 
         Args:
             X: Feature matrix of shape ``(n_samples, feature_dim)``.
@@ -79,33 +89,19 @@ class HallucinationProbe(nn.Module):
         Returns:
             ``self`` (for method chaining).
         """
-        X_scaled = self._scaler.fit_transform(X)
+        X_scaled = self._scaler.fit_transform(X.astype(np.float32))
+        n_components = min(PCA_COMPONENTS, X_scaled.shape[0] - 1, X_scaled.shape[1])
+        self._pca = PCA(n_components=n_components, random_state=RANDOM_STATE)
+        X_reduced = self._pca.fit_transform(X_scaled)
 
-        self._build_network(X_scaled.shape[1])
-
-        X_t = torch.from_numpy(X_scaled).float()
-        y_t = torch.from_numpy(y.astype(np.float32))
-
-        # Weight positive examples by neg/pos ratio to handle class imbalance.
-        n_pos = int(y.sum())
-        n_neg = len(y) - n_pos
-        pos_weight = torch.tensor([n_neg / max(n_pos, 1)], dtype=torch.float32)
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-
-        # ------------------------------------------------------------------
-        # STUDENT: Replace or extend the training loop below.
-        # ------------------------------------------------------------------
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-
-        self.train()
-        for _ in range(200):
-            optimizer.zero_grad()
-            logits = self(X_t)
-            loss = criterion(logits, y_t)
-            loss.backward()
-            optimizer.step()
-        # ------------------------------------------------------------------
-
+        self._classifier = LogisticRegression(
+            C=0.5,
+            class_weight="balanced",
+            max_iter=5000,
+            random_state=RANDOM_STATE,
+            solver="lbfgs",
+        )
+        self._classifier.fit(X_reduced, y.astype(int))
         self.eval()
         return self
 
@@ -169,10 +165,9 @@ class HallucinationProbe(nn.Module):
             estimated probability of the hallucinated class (label 1).
             Used to compute AUROC.
         """
-        X_scaled = self._scaler.transform(X)
-        X_t = torch.from_numpy(X_scaled).float()
-        with torch.no_grad():
-            logits = self(X_t)
-            prob_pos = torch.sigmoid(logits).numpy()
+        if self._classifier is None or self._pca is None:
+            raise RuntimeError("Probe has not been fitted yet. Call fit() first.")
+        X_scaled = self._scaler.transform(X.astype(np.float32))
+        X_reduced = self._pca.transform(X_scaled)
+        prob_pos = self._classifier.predict_proba(X_reduced)[:, 1]
         return np.stack([1.0 - prob_pos, prob_pos], axis=1)
-

@@ -20,6 +20,10 @@ from __future__ import annotations
 import torch
 
 
+SELECTED_LAYERS = (-1, -2, -4, -8)
+TAIL_TOKENS = 64
+
+
 def aggregate(
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor,
@@ -41,21 +45,28 @@ def aggregate(
         Replace or extend the skeleton below with alternative layer selection,
         token pooling (mean, max, weighted), or multi-layer fusion strategies.
     """
-    # ------------------------------------------------------------------
-    # STUDENT: Replace or extend the aggregation below.
-    # ------------------------------------------------------------------
+    real_positions = attention_mask.to(torch.bool).nonzero(as_tuple=False).squeeze(-1)
+    real_positions = real_positions.to(hidden_states.device)
+    if real_positions.numel() == 0:
+        raise ValueError("attention_mask contains no real tokens")
 
-    # Default: last real token of the final transformer layer.
-    layer = hidden_states[-1]          # (seq_len, hidden_dim)
+    tail_positions = real_positions[-min(TAIL_TOKENS, real_positions.numel()) :]
 
-    # Find the index of the last real (non-padding) token.
-    real_positions = attention_mask.nonzero(as_tuple=False)  # (n_real, 1)
-    last_pos = int(real_positions[-1].item())                 # scalar index
+    pooled: list[torch.Tensor] = []
+    for layer_idx in SELECTED_LAYERS:
+        layer = hidden_states[layer_idx]  # (seq_len, hidden_dim)
+        real_tokens = layer.index_select(0, real_positions)
+        tail_tokens = layer.index_select(0, tail_positions)
 
-    feature = layer[last_pos]          # (hidden_dim,)
+        pooled.extend(
+            [
+                layer[real_positions[-1]],  # answer-final token
+                tail_tokens.mean(dim=0),     # response-tail summary
+                real_tokens.mean(dim=0),     # full prompt+response summary
+            ]
+        )
 
-    return feature
-    # ------------------------------------------------------------------
+    return torch.cat(pooled, dim=0).float()
 
 
 def extract_geometric_features(
@@ -81,12 +92,36 @@ def extract_geometric_features(
         norms, inter-layer cosine similarity (representation drift), or
         sequence length.
     """
-    # ------------------------------------------------------------------
-    # STUDENT: Replace or extend the geometric feature extraction below.
-    # ------------------------------------------------------------------
+    real_positions = attention_mask.to(torch.bool).nonzero(as_tuple=False).squeeze(-1)
+    real_positions = real_positions.to(hidden_states.device)
+    if real_positions.numel() == 0:
+        return torch.zeros(0, dtype=torch.float32, device=hidden_states.device)
 
-    # Placeholder: returns an empty tensor (no geometric features).
-    return torch.zeros(0)
+    features: list[torch.Tensor] = [
+        torch.tensor([float(real_positions.numel())], device=hidden_states.device)
+    ]
+
+    last_vectors = []
+    for layer_idx in SELECTED_LAYERS:
+        tokens = hidden_states[layer_idx].index_select(0, real_positions).float()
+        token_norms = torch.linalg.vector_norm(tokens, dim=1)
+        last_vector = tokens[-1]
+        last_vectors.append(last_vector)
+        features.append(
+            torch.stack(
+                [
+                    token_norms.mean(),
+                    token_norms.std(unbiased=False),
+                    torch.linalg.vector_norm(last_vector),
+                ]
+            )
+        )
+
+    for left, right in zip(last_vectors, last_vectors[1:]):
+        cosine = torch.nn.functional.cosine_similarity(left, right, dim=0)
+        features.append(cosine.reshape(1))
+
+    return torch.cat(features, dim=0).float()
 
 
 def aggregation_and_feature_extraction(

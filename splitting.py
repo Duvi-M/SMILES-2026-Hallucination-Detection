@@ -51,6 +51,7 @@ def split_data(
         function returns the list described above.
     """
 
+    y = np.asarray(y).astype(int)
     idx = np.arange(len(y))
 
     idx_train_val, idx_test = train_test_split(
@@ -66,5 +67,12 @@ def split_data(
         random_state=random_state,
         stratify=y[idx_train_val],
     )
-    return [(idx_train, idx_val, idx_test)]
 
+    for split in (idx_train, idx_val, idx_test):
+        split.sort()
+
+    covered = np.concatenate([idx_train, idx_val, idx_test])
+    if len(np.unique(covered)) != len(y):
+        raise ValueError("Split indices must be non-overlapping and cover all samples")
+
+    return [(idx_train, idx_val, idx_test)]

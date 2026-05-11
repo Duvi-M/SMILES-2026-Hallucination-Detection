@@ -21,12 +21,12 @@ It fits comfortably on a free Google Colab T4 GPU.
 ## Repository Structure
 
 ```
-SMILES-HALLUCINATION-DETECTION/
+SMILES-2026-Hallucination-Detection-Solution/
 ├── data/
 │   ├── dataset.csv        # Labelled training data (prompt, response, label)
 │   └── test.csv           # Unlabelled competition test set
 │
-├── solution.py            # Main script - run to create a 
+├── solution.py            # Main script - run to create results.json and predictions.csv
 │
 │   ── Files you implement ──────────────────────────────────────────────
 ├── aggregation.py         # Layer selection, token pooling, geometric features
@@ -38,6 +38,9 @@ SMILES-HALLUCINATION-DETECTION/
 ├── evaluate.py            # Evaluation loop, metrics, summary table, JSON output
 │
 ├── requirements.txt       # Python dependencies
+├── results.json           # Evaluation metrics produced by solution.py
+├── predictions.csv        # Competition predictions produced by solution.py
+├── SOLUTION.md            # Reproducibility report and final approach
 └── LICENSE
 ```
 
@@ -48,18 +51,21 @@ SMILES-HALLUCINATION-DETECTION/
 
 Open the terminal in Colab and run:
 
-```python
-git clone https://github.com/ahdr3w/SMILES-HALLUCINATION-DETECTION.git
-cd SMILES-HALLUCINATION-DETECTION
+```bash
+git clone <your-github-repository-url>
+cd SMILES-2026-Hallucination-Detection-Solution
 pip install -r requirements.txt
 python solution.py
 ```
 
+Running `solution.py` writes `results.json` and `predictions.csv` in the
+repository root.
+
 ### Local Setup
 
 ```bash
-git clone https://github.com/ahdr3w/SMILES-HALLUCINATION-DETECTION.git
-cd SMILES-HALLUCINATION-DETECTION
+git clone <your-github-repository-url>
+cd SMILES-2026-Hallucination-Detection-Solution
 
 python -m venv .venv
 source .venv/bin/activate        # Linux / macOS
@@ -68,6 +74,19 @@ source .venv/bin/activate        # Linux / macOS
 pip install -r requirements.txt
 python solution.py
 ```
+
+For environments where `python` points to Python 2 or is unavailable, use:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 solution.py
+```
+
+The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face. Reproducing the
+submitted predictions requires internet access for that download unless the
+model is already cached locally.
 
 ## Dataset
 
@@ -91,6 +110,11 @@ Given the context, answer the question …<|im_end|>
 
 
 `data/test.csv` is structured identically but the `label` column is null - these are the samples you submit predictions for via a `predictions.csv` generated file.
+The generated prediction file has exactly two columns:
+
+```csv
+id,label
+```
 
 
 ## What You Implement
