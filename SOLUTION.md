@@ -9,6 +9,17 @@ The solution must use the model hidden states, train a lightweight probe, write
 `results.json`, and create `predictions.csv` for the unlabelled competition
 `data/test.csv`.
 
+## Submission checklist
+
+- GitHub repository URL:
+  `https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection`
+- Public `predictions.csv` URL:
+  `https://drive.google.com/file/d/1CmcIlS_ARoqbFFWTWhDwJzUXHUX1C8Se/view?usp=sharing`
+- Main reproduction command: `python3 solution.py`
+- Generated artifacts:
+  - `results.json`
+  - `predictions.csv`
+
 ## Approach
 
 The implementation keeps the original repository entry points and public API:
@@ -22,6 +33,11 @@ The implementation keeps the original repository entry points and public API:
 
 The final method is intentionally simple: multi-layer hidden-state pooling,
 PCA dimensionality reduction, and balanced logistic regression.
+
+The largest improvement came from switching from full-sequence pooling to
+response-tail pooling and selecting more widely spaced transformer layers
+(-1, -4, -8, -12), which made the probe focus more on the generated answer
+rather than the full prompt.
 
 ## Model and features
 
@@ -111,11 +127,22 @@ The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face. A GPU, MPS, or
 Colab T4 is recommended. On the final local run, MPS was used and hidden-state
 extraction for the labelled set took about 136 seconds.
 
-Running `python solution.py` creates:
+Running `python3 solution.py` creates:
 
 - `results.json`: internal split metrics and metadata,
 - `predictions.csv`: two columns, `id` and `label`, for the 100 unlabelled test
   samples.
+
+Environment used for the final local reproduction:
+
+- Python: 3.14.0
+- OS/device: macOS Darwin 25.3.0 on arm64 Apple Silicon, using MPS
+- Key packages:
+  - `torch==2.11.0`
+  - `transformers==5.8.0`
+  - `scikit-learn==1.8.0`
+  - `numpy==2.3.5`
+  - `pandas==3.0.2`
 
 ## Experiments and discarded attempts
 
