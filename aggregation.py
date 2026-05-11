@@ -20,7 +20,7 @@ from __future__ import annotations
 import torch
 
 
-SELECTED_LAYERS = (-1, -2, -4, -8)
+SELECTED_LAYERS = (-1, -4, -8, -12)
 TAIL_TOKENS = 64
 
 

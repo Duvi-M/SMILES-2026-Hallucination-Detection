@@ -95,7 +95,7 @@ class HallucinationProbe(nn.Module):
         X_reduced = self._pca.fit_transform(X_scaled)
 
         self._classifier = LogisticRegression(
-            C=0.25,
+            C=0.5,
             class_weight="balanced",
             max_iter=5000,
             random_state=RANDOM_STATE,

@@ -28,7 +28,7 @@ PCA dimensionality reduction, and balanced logistic regression.
 The feature extractor uses the hidden states produced by `Qwen/Qwen2.5-0.5B`
 for the concatenated text `prompt + response`.
 
-For each sample, `aggregation.py` selects layers `-1`, `-2`, `-4`, and `-8`.
+For each sample, `aggregation.py` selects layers `-1`, `-4`, `-8`, and `-12`.
 For every selected layer it concatenates two response-focused pooled vectors:
 
 - the final real token representation,
@@ -54,7 +54,7 @@ baseline compact and reproducible.
 
 - `StandardScaler`,
 - `PCA(n_components=128, random_state=42)`,
-- `LogisticRegression(C=0.25, class_weight="balanced", max_iter=5000,
+- `LogisticRegression(C=0.5, class_weight="balanced", max_iter=5000,
   random_state=42)`.
 
 The validation split is used by `fit_hyperparameters` to tune the decision
@@ -85,9 +85,9 @@ evaluation on the labelled dataset:
 | Checkpoint | Accuracy | F1 | AUROC |
 | --- | ---: | ---: | ---: |
 | Majority baseline | 70.19% | 82.49% | N/A |
-| Probe train | 84.62% | 88.86% | 93.13% |
-| Probe validation | 79.81% | 85.31% | 79.58% |
-| Probe test | 74.04% | 81.63% | 69.11% |
+| Probe train | 86.07% | 90.25% | 93.50% |
+| Probe validation | 81.73% | 87.25% | 81.62% |
+| Probe test | 72.12% | 80.00% | 69.16% |
 
 Generated artifacts:
 
@@ -109,7 +109,7 @@ python3 solution.py
 
 The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face. A GPU, MPS, or
 Colab T4 is recommended. On the final local run, MPS was used and hidden-state
-extraction for the labelled set took about 140 seconds.
+extraction for the labelled set took about 136 seconds.
 
 Running `python solution.py` creates:
 
@@ -141,7 +141,11 @@ against obvious instability.
 | Late-focused layers `(-1, -2, -3, -4)`, PCA=128, C=0.25, no geometric features | 75.96 / 84.85 / 75.65 | 71.15 / 81.48 / 65.36 | Discarded; better validation, weaker internal test AUROC |
 | Current layers, PCA=96, C=0.25, geometric features enabled | 74.04 / 83.44 / 72.56 | 73.08 / 82.50 / 68.58 | Discarded; improvement was too small to justify changing the final feature set |
 | Response-tail pooling, final token + tail-64 mean, PCA=96, C=0.25 | 79.81 / 87.27 / 82.02 | 66.35 / 79.04 / 67.70 | Discarded; validation was strong but internal test accuracy dropped |
-| Response-tail pooling, final token + tail-64 mean, PCA=128, C=0.25 | 79.81 / 85.31 / 79.58 | 74.04 / 81.63 / 69.11 | Final; best validation/test balance among simple variants |
+| Response-tail pooling, current layers `(-1, -2, -4, -8)`, PCA=128, C=0.25 | 79.81 / 85.31 / 79.58 | 74.04 / 81.63 / 69.11 | Previous final |
+| Response-tail pooling, tail-32, current layers, PCA=96, C=0.10 | 80.77 / 87.50 / 80.34 | 68.27 / 79.25 / 67.34 | Discarded; weaker internal test sanity check |
+| Response-tail pooling, tail-96, current layers, PCA=96, C=0.10 | 76.92 / 85.54 / 78.44 | 70.19 / 81.44 / 67.08 | Discarded; no validation improvement |
+| Response-tail pooling, layers `(-1, -4, -8, -12)`, tail-64, PCA=128, C=0.50 | 81.73 / 87.25 / 81.62 | 72.12 / 80.00 / 69.16 | Final; best validation AUROC/accuracy without internal test collapse |
+| Response-tail pooling with delta `(final - tail_mean)`, PCA=96, C=0.10 | 80.77 / 86.11 / 78.97 | 72.12 / 79.43 / 68.18 | Discarded; delta did not improve validation AUROC |
 | Response-tail pooling, final token + tail-64 mean, PCA=96, C=0.25, 5-fold CV check | 75.76 / 84.61 / 73.97 | N/A | Kept as a stability check; not used to tune on the internal test split |
 
 The optional geometric features in `aggregation.py` remain implemented but
