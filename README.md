@@ -27,7 +27,7 @@ It fits comfortably on a free Google Colab T4 GPU.
 ## Repository Structure
 
 ```
-SMILES-2026-Hallucination-Detection-Solution/
+SMILES-2026-Hallucination-Detection/
 ├── data/
 │   ├── dataset.csv        # Labelled training data (prompt, response, label)
 │   └── test.csv           # Unlabelled competition test set
@@ -58,8 +58,8 @@ SMILES-2026-Hallucination-Detection-Solution/
 Open the terminal in Colab and run:
 
 ```bash
-git clone <your-github-repository-url>
-cd SMILES-2026-Hallucination-Detection-Solution
+git clone https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection.git
+cd SMILES-2026-Hallucination-Detection
 pip install -r requirements.txt
 python solution.py
 ```
@@ -70,8 +70,8 @@ repository root.
 ### Local Setup
 
 ```bash
-git clone <your-github-repository-url>
-cd SMILES-2026-Hallucination-Detection-Solution
+git clone https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection.git
+cd SMILES-2026-Hallucination-Detection
 
 python -m venv .venv
 source .venv/bin/activate        # Linux / macOS

@@ -20,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 RANDOM_STATE = 42
-PCA_COMPONENTS = 96
+PCA_COMPONENTS = 128
 
 
 class HallucinationProbe(nn.Module):
@@ -95,7 +95,7 @@ class HallucinationProbe(nn.Module):
         X_reduced = self._pca.fit_transform(X_scaled)
 
         self._classifier = LogisticRegression(
-            C=0.5,
+            C=0.25,
             class_weight="balanced",
             max_iter=5000,
             random_state=RANDOM_STATE,

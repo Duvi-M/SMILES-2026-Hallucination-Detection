@@ -61,8 +61,7 @@ def aggregate(
         pooled.extend(
             [
                 layer[real_positions[-1]],  # answer-final token
-                tail_tokens.mean(dim=0),     # response-tail summary
-                real_tokens.mean(dim=0),     # full prompt+response summary
+                tail_tokens.mean(dim=0),     # assistant/response-tail summary
             ]
         )
 

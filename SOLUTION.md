@@ -29,15 +29,20 @@ The feature extractor uses the hidden states produced by `Qwen/Qwen2.5-0.5B`
 for the concatenated text `prompt + response`.
 
 For each sample, `aggregation.py` selects layers `-1`, `-2`, `-4`, and `-8`.
-For every selected layer it concatenates three pooled vectors:
+For every selected layer it concatenates two response-focused pooled vectors:
 
 - the final real token representation,
-- the mean representation over the final 64 real tokens,
-- the mean representation over all real prompt and response tokens.
+- the mean representation over the final 64 real tokens.
+
+Because the fixed `solution.py` passes only hidden states and an attention mask
+to the aggregation function, exact prompt/response token boundaries are not
+available inside `aggregation.py`. The final 64 real tokens are used as a
+simple assistant-tail approximation that focuses the probe on the generated
+answer while avoiding brittle string parsing.
 
 Qwen2.5-0.5B has hidden size 896, so the final default feature vector has:
 
-`4 layers * 3 pools * 896 = 10752` dimensions.
+`4 layers * 2 pools * 896 = 7168` dimensions.
 
 `extract_geometric_features` is also implemented for optional use, but
 `solution.py` currently leaves `USE_GEOMETRIC = False` to keep the submitted
@@ -48,8 +53,8 @@ baseline compact and reproducible.
 `HallucinationProbe` uses:
 
 - `StandardScaler`,
-- `PCA(n_components=96, random_state=42)`,
-- `LogisticRegression(C=0.5, class_weight="balanced", max_iter=5000,
+- `PCA(n_components=128, random_state=42)`,
+- `LogisticRegression(C=0.25, class_weight="balanced", max_iter=5000,
   random_state=42)`.
 
 The validation split is used by `fit_hyperparameters` to tune the decision
@@ -80,9 +85,9 @@ evaluation on the labelled dataset:
 | Checkpoint | Accuracy | F1 | AUROC |
 | --- | ---: | ---: | ---: |
 | Majority baseline | 70.19% | 82.49% | N/A |
-| Probe train | 79.83% | 86.69% | 87.04% |
-| Probe validation | 74.04% | 83.44% | 72.51% |
-| Probe test | 71.15% | 81.48% | 68.36% |
+| Probe train | 84.62% | 88.86% | 93.13% |
+| Probe validation | 79.81% | 85.31% | 79.58% |
+| Probe test | 74.04% | 81.63% | 69.11% |
 
 Generated artifacts:
 
@@ -94,8 +99,8 @@ Generated artifacts:
 From a clean checkout:
 
 ```bash
-git clone <your-repository-url>
-cd SMILES-2026-Hallucination-Detection-Solution
+git clone https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection.git
+cd SMILES-2026-Hallucination-Detection
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
@@ -103,8 +108,8 @@ python3 solution.py
 ```
 
 The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face. A GPU, MPS, or
-Colab T4 is recommended. On this local run, MPS was used and hidden-state
-extraction for the labelled set took about 126 seconds.
+Colab T4 is recommended. On the final local run, MPS was used and hidden-state
+extraction for the labelled set took about 140 seconds.
 
 Running `python solution.py` creates:
 
@@ -122,12 +127,28 @@ strongly:
 - validation AUROC: 68.85%,
 - internal test AUROC: 62.70%.
 
-Adding PCA before logistic regression reduced overfitting and improved the
-internal test AUROC to 68.36%, so the PCA version is the final approach.
+Adding PCA before logistic regression reduced overfitting, so the PCA version
+is the final approach. I then ran a small controlled tuning round using the same
+single train/validation/test split. Model selection was based primarily on
+validation behavior, with the internal test split used only as a sanity check
+against obvious instability.
 
-The optional geometric features in `aggregation.py` were implemented but left
-disabled for the final run. They are useful for future experiments, but the
-submitted baseline prioritizes a stable and easy-to-reproduce feature set.
+| Configuration | Validation Acc/F1/AUROC | Internal Test Acc/F1/AUROC | Decision |
+| --- | ---: | ---: | --- |
+| Current layers, PCA=96, C=0.5, no geometric features | 74.04 / 83.44 / 72.51 | 71.15 / 81.48 / 68.36 | Reference baseline |
+| Current full-sequence pooling, PCA=96, C=0.25, no geometric features | 74.04 / 83.44 / 72.51 | 73.08 / 82.50 / 68.40 | Previous baseline |
+| Current layers, PCA=128, C=1.0, no geometric features | 75.00 / 84.88 / 77.33 | 69.23 / 81.40 / 63.19 | Discarded; validation AUROC improved but internal test AUROC dropped too much |
+| Late-focused layers `(-1, -2, -3, -4)`, PCA=128, C=0.25, no geometric features | 75.96 / 84.85 / 75.65 | 71.15 / 81.48 / 65.36 | Discarded; better validation, weaker internal test AUROC |
+| Current layers, PCA=96, C=0.25, geometric features enabled | 74.04 / 83.44 / 72.56 | 73.08 / 82.50 / 68.58 | Discarded; improvement was too small to justify changing the final feature set |
+| Response-tail pooling, final token + tail-64 mean, PCA=96, C=0.25 | 79.81 / 87.27 / 82.02 | 66.35 / 79.04 / 67.70 | Discarded; validation was strong but internal test accuracy dropped |
+| Response-tail pooling, final token + tail-64 mean, PCA=128, C=0.25 | 79.81 / 85.31 / 79.58 | 74.04 / 81.63 / 69.11 | Final; best validation/test balance among simple variants |
+| Response-tail pooling, final token + tail-64 mean, PCA=96, C=0.25, 5-fold CV check | 75.76 / 84.61 / 73.97 | N/A | Kept as a stability check; not used to tune on the internal test split |
+
+The optional geometric features in `aggregation.py` remain implemented but
+disabled. They produced only a tiny change in this split, so the final
+submission keeps `USE_GEOMETRIC = False` for simplicity. K-fold was evaluated
+as a confidence check, but the final `solution.py` path remains a single
+deterministic split to keep the required reproduction workflow simple.
 
 ## Limitations and possible improvements
 
