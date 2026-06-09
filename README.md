@@ -1,173 +1,173 @@
-# 🔍 SMILES-2026 Hallucination Detection
+# LLM Hallucination Detection Probe
 
-Detect whether a small language
-model's answer is *hallucinated* (fabricated) or *truthful* using the model's
-own internal representations (hidden states).
+A reproducible machine learning project for detecting hallucinated answers from
+a small language model using transformer hidden states and a lightweight probe
+classifier.
 
-## Solution Report
+This repository started as a SMILES-2026 hallucination detection submission and
+has been documented as a portfolio-ready NLP project. The official competition
+report, reproducibility details, experiments, and submission links are in
+[SOLUTION.md](./SOLUTION.md).
 
-See the full reproducibility and methodology report here:
+## Highlights
 
-[SOLUTION.md](./SOLUTION.md)
+- Built an end-to-end hallucination detection pipeline around
+  `Qwen/Qwen2.5-0.5B` hidden states.
+- Engineered multi-layer response-tail features from transformer activations.
+- Reduced overfitting with PCA and balanced logistic regression.
+- Compared multiple pooling strategies, layer selections, regularization
+  settings, and optional geometric features.
+- Generated `results.json` and competition-ready `predictions.csv` with one
+  command.
 
-## Overview
+## Problem
 
-Large (and small) language models sometimes *hallucinate* — they generate
-plausible-sounding text that is factually incorrect.  This competition asks you
-to build a **lightweight binary classifier** (called a *probe*) that reads the
-model's internal hidden states and predicts whether a given response is
-truthful (`label = 0`) or hallucinated (`label = 1`).
+Large language models can produce fluent answers that are factually incorrect.
+This project trains a binary probe to classify a model response as:
 
-The language model used throughout is **[Qwen/Qwen2.5-0.5B](https://huggingface.co/Qwen/Qwen2.5-0.5B)** — a
-decoder-only causal transformer with 24 layers and a hidden dimension of 896.
-It fits comfortably on a free Google Colab T4 GPU.
+- `0`: truthful
+- `1`: hallucinated
 
-**Primary ranking metric:** Accuracy on the held-out `test.csv`.
+Each sample contains a ChatML prompt, a generated response, and a hallucination
+label. Instead of fine-tuning the language model, the solution reads internal
+hidden states from Qwen2.5-0.5B and trains a compact downstream classifier.
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A["ChatML prompt + generated response"] --> B["Qwen2.5-0.5B"]
+    B --> C["Hidden states"]
+    C --> D["Response-tail pooling"]
+    D --> E["Selected layers: -1, -4, -8, -12"]
+    E --> F["StandardScaler + PCA"]
+    F --> G["Balanced logistic regression probe"]
+    G --> H["Truthful or hallucinated label"]
+```
+
+## Final Approach
+
+The final probe uses response-focused hidden-state features:
+
+- selected transformer layers: `-1`, `-4`, `-8`, `-12`
+- pooled vectors per selected layer:
+  - final real token representation
+  - mean representation over the final 64 real tokens
+- dimensionality reduction: `PCA(n_components=128)`
+- classifier: balanced logistic regression with `C=0.5`
+- split strategy: deterministic stratified train/validation/internal-test split
+
+The largest improvement came from switching from full-sequence pooling to
+response-tail pooling and selecting more widely spaced transformer layers. This
+made the probe focus more on the generated answer rather than the full prompt.
+
+## Results
+
+Internal evaluation from the official `python3 solution.py` run:
+
+| Checkpoint | Accuracy | F1 | AUROC |
+| --- | ---: | ---: | ---: |
+| Majority baseline | 70.19% | 82.49% | N/A |
+| Probe train | 86.07% | 90.25% | 93.50% |
+| Probe validation | 81.73% | 87.25% | 81.62% |
+| Probe test | 72.12% | 80.00% | 69.16% |
+
+The full experiment table, discarded attempts, and final rationale are
+documented in [SOLUTION.md](./SOLUTION.md).
 
 ## Repository Structure
 
-```
-SMILES-2026-Hallucination-Detection/
+```text
+.
+├── aggregation.py          # Hidden-state layer selection and pooling
+├── probe.py                # PCA + balanced logistic regression probe
+├── splitting.py            # Deterministic stratified data split
+├── solution.py             # Main reproducible entry point
+├── model.py                # Qwen2.5-0.5B loader
+├── evaluate.py             # Evaluation and artifact saving utilities
 ├── data/
-│   ├── dataset.csv        # Labelled training data (prompt, response, label)
-│   └── test.csv           # Unlabelled competition test set
-│
-├── solution.py            # Main script - run to create results.json and predictions.csv
-│
-│   ── Files you implement ──────────────────────────────────────────────
-├── aggregation.py         # Layer selection, token pooling, geometric features
-├── probe.py               # HallucinationProbe — the binary classifier
-├── splitting.py           # Train / validation / test split strategy
-│
-│   ── Fixed infrastructure (do not edit) ───────────────────────────────
-├── model.py               # Loads Qwen2.5-0.5B and exposes get_model_and_tokenizer()
-├── evaluate.py            # Evaluation loop, metrics, summary table, JSON output
-│
-├── requirements.txt       # Python dependencies
-├── results.json           # Evaluation metrics produced by solution.py
-├── predictions.csv        # Competition predictions produced by solution.py
-├── SOLUTION.md            # Reproducibility report and final approach
-└── LICENSE
+│   ├── dataset.csv         # Labelled training/evaluation data
+│   └── test.csv            # Unlabelled competition test data
+├── results.json            # Internal evaluation metrics
+├── predictions.csv         # Generated competition predictions
+├── SOLUTION.md             # Official SMILES-2026 solution report
+└── docs/
+    ├── github-profile.md   # Suggested repo name, topics, and profile copy
+    └── portfolio-summary.md
 ```
-
 
 ## Quick Start
 
-### Google Colab
-
-Open the terminal in Colab and run:
-
-```bash
-git clone https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection.git
-cd SMILES-2026-Hallucination-Detection
-pip install -r requirements.txt
-python solution.py
-```
-
-Running `solution.py` writes `results.json` and `predictions.csv` in the
-repository root.
-
-### Local Setup
-
 ```bash
 git clone https://github.com/Duvi-M/SMILES-2026-Hallucination-Detection.git
 cd SMILES-2026-Hallucination-Detection
 
-python -m venv .venv
-source .venv/bin/activate        # Linux / macOS
-# .venv\Scripts\activate.bat     # Windows
-
-pip install -r requirements.txt
-python solution.py
-```
-
-For environments where `python` points to Python 2 or is unavailable, use:
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 python3 solution.py
 ```
 
-The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face. Reproducing the
-submitted predictions requires internet access for that download unless the
-model is already cached locally.
+Running `python3 solution.py` writes:
 
-## Dataset
+- `results.json`: internal split metrics and metadata
+- `predictions.csv`: predictions for the unlabelled test set
 
-`data/dataset.csv` contains 689 labelled samples with three columns:
+The first run downloads `Qwen/Qwen2.5-0.5B` from Hugging Face unless the model
+is already cached locally. A GPU, Apple Silicon MPS, or Colab T4 is recommended.
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `prompt` | str | Full ChatML-formatted conversation context fed to Qwen |
-| `response` | str | The model's generated response |
-| `label` | float | `1.0` = hallucinated · `0.0` = truthful |
+## Data
 
-The `prompt` uses the **ChatML** template built into Qwen models:
+`data/dataset.csv` contains 689 labelled samples:
 
-```
-<|im_start|>system
-You are a helpful assistant.<|im_end|>
-<|im_start|>user
-Given the context, answer the question …<|im_end|>
-<|im_start|>assistant
-```
+| Column | Description |
+| --- | --- |
+| `prompt` | ChatML-formatted conversation context |
+| `response` | Generated model response |
+| `label` | `0.0` = truthful, `1.0` = hallucinated |
 
-
-`data/test.csv` is structured identically but the `label` column is null - these are the samples you submit predictions for via a `predictions.csv` generated file.
-The generated prediction file has exactly two columns:
+`data/test.csv` follows the same schema, with null labels. The generated
+prediction file contains:
 
 ```csv
 id,label
 ```
 
+## Design Decisions
 
-## What You Implement
+- Used hidden states instead of text-only features to inspect the model's
+  internal representation of its own answer.
+- Kept the classifier lightweight to reduce overfitting on a small labelled
+  dataset.
+- Added PCA before logistic regression because the raw hidden-state feature
+  vector is high-dimensional.
+- Used response-tail pooling because hallucination evidence is more likely to
+  appear in the generated answer than in the full prompt.
+- Kept optional geometric features disabled because they added complexity
+  without a meaningful validation gain in this split.
 
-You are expected to edit **three files**:  
-- `aggregation.py`
-- `probe.py`
-- `splitting.py`
+## Portfolio Notes
 
-The rest of the codebase shall remain untouched.
+This project is strongest as a portfolio example of reproducible applied ML:
 
-**Feature Engineering & Dimensionality Reduction**: Applicants are encouraged to experiment with adding hand-crafted features during the aggregation step, drawing on geometrical or topological methods to enrich the representation of probe outputs. Additionally, you may apply dimensionality reduction techniques within probe.py to compress or refine the feature space. 
+- feature engineering with transformer activations
+- careful validation and overfitting control
+- experiment tracking through a written report
+- one-command reproducibility
+- clear separation between fixed infrastructure and implemented components
 
-## Evaluation
+Suggested GitHub topics and profile copy are in
+[docs/github-profile.md](./docs/github-profile.md). A short CV/LinkedIn-ready
+summary is in [docs/portfolio-summary.md](./docs/portfolio-summary.md).
 
-For each fold `evaluate.py` reports four numbers:
+## Limitations
 
-| # | Checkpoint | Metrics |
-|---|-----------|---------|
-| 1 | Majority-class baseline | Accuracy, F1 |
-| 2 | `HallucinationProbe` on **training** split | Accuracy, F1, AUROC |
-| 3 | `HallucinationProbe` on **validation** split | Accuracy, F1, AUROC |
-| 4 | `HallucinationProbe` on **test** split | Accuracy, F1, AUROC |
+- The probe is evaluated on a small labelled dataset.
+- The final approach uses one deterministic split rather than an ensemble.
+- Prompt/response token boundaries are approximated with response-tail pooling.
+- Further gains may come from cross-validation, calibration, ensembling, or
+  exact response-only token boundary handling.
 
-**Accuracy on the `test.csv` is the primary competition metric.**
+## License
 
-Results are averaged across folds (if using k-fold) and saved to
-`results.json`.
-
-
-# What is expected from the applicant of SMILES-2026 ?
-
-**Q1:** What must the applicant submit in the application form ?<br>
-**A1:** Submit: 
-1. A link to your Github repository
-2. A link to your `predictions.csv` publicly available file on some cloud storage
-
-**Q2:** What the applicants must include in the repository ?<br>
-**A2:** Your repository must contain: 
-1. `results.json` - produced by the official `solution.py`
-2. Report file in Markdown format `SOLUTION.md`. 
-
-**Q3:** Report requirements (`SOLUTION.md`)<br>
-**A3:** Your report must include:<br>
-- Reproducibility instructions: exact commands to run your solution and acquire the same `predictions.csv`, required environment (if any), any important implementation details needed to reproduce your result.
-- Final solution description: What components you modified ? What your final approach is ? Why you made these choices ? What contributed most to improving the metric ?
-- Experiments and failed attempts: What ideas you tried but did not include in the final solution ? Why they did not work or were discarded ?
-
-**Q4:** Reproducibility<br>
-**A4:** The repository must be self-contained and runnable with the provided `solution.py` file. Your solution must not require changes to the fixed infrastructure files. Running `solution.py` must generate your submitted `predictions.csv`.
+See [LICENSE](./LICENSE).
